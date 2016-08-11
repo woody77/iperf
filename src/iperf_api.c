@@ -1056,12 +1056,14 @@ iperf_check_throttle(struct iperf_stream *sp, struct timeval *nowP)
 {
     double seconds;
     uint64_t bits_per_second;
+    struct iperf_stream_result *rp = sp->result;
 
     if (sp->test->done)
         return;
-    seconds = timeval_diff(&sp->result->start_time_fixed, nowP);
-    bits_per_second = sp->result->bytes_sent * 8 / seconds;
-    if (bits_per_second < sp->test->settings->rate) {
+
+    seconds = timeval_diff(&rp->start_time, nowP);
+    bits_per_second = rp->bytes_sent * 8 / seconds;
+    if ( seconds == 0.0 || bits_per_second < sp->test->settings->rate) {
         sp->green_light = 1;
         FD_SET(sp->socket, &sp->test->write_set);
     } else {
@@ -1164,7 +1166,7 @@ iperf_init_test(struct iperf_test *test)
 	return -1;
     }
     SLIST_FOREACH(sp, &test->streams, streams) {
-	sp->result->start_time = sp->result->start_time_fixed = now;
+	sp->result->start_time = sp->result->start_time_fixed = sp->result->interval_start_time = now;
     }
 
     if (test->on_test_start)
@@ -2114,6 +2116,7 @@ iperf_reset_stats(struct iperf_test *test)
         rp->bytes_sent_omit = rp->bytes_sent;
         rp->bytes_received = 0;
         rp->bytes_sent_this_interval = rp->bytes_received_this_interval = 0;
+        rp->interval_start_time = now;
 	if (test->sender && test->sender_has_retransmits) {
 	    struct iperf_interval_results ir; /* temporary results structure */
 	    save_tcpinfo(sp, &ir);
@@ -2134,10 +2137,13 @@ iperf_reset_stats(struct iperf_test *test)
 void
 iperf_stats_callback(struct iperf_test *test)
 {
+    struct timeval now;
     struct iperf_stream *sp;
     struct iperf_stream_result *rp = NULL;
     struct iperf_interval_results *irp, temp;
 
+    gettimeofday(&now, NULL);
+    
     temp.omitted = test->omitting;
     SLIST_FOREACH(sp, &test->streams, streams) {
         rp = sp->result;
@@ -2147,12 +2153,12 @@ iperf_stats_callback(struct iperf_test *test)
 	irp = TAILQ_LAST(&rp->interval_results, irlisthead);
         /* result->end_time contains timestamp of previous interval */
         if ( irp != NULL ) /* not the 1st interval */
-            memcpy(&temp.interval_start_time, &rp->end_time, sizeof(struct timeval));
+            temp.interval_start_time = rp->end_time;
         else /* or use timestamp from beginning */
-            memcpy(&temp.interval_start_time, &rp->start_time, sizeof(struct timeval));
+            temp.interval_start_time = rp->start_time;
         /* now save time of end of this interval */
-        gettimeofday(&rp->end_time, NULL);
-        memcpy(&temp.interval_end_time, &rp->end_time, sizeof(struct timeval));
+        rp->end_time = now;
+        temp.interval_end_time = rp->end_time;
         temp.interval_duration = timeval_diff(&temp.interval_start_time, &temp.interval_end_time);
         //temp.interval_duration = timeval_diff(&temp.interval_start_time, &temp.interval_end_time);
 	if (test->protocol->id == Ptcp) {
@@ -2198,6 +2204,7 @@ iperf_stats_callback(struct iperf_test *test)
 	}
         add_to_interval_list(rp, &temp);
         rp->bytes_sent_this_interval = rp->bytes_received_this_interval = 0;
+        rp->interval_start_time = now;
     }
 }
 
