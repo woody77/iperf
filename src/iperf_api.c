@@ -1200,7 +1200,7 @@ iperf_create_send_timers(struct iperf_test * test)
         sp->green_light = 1;
 	if (test->settings->rate != 0) {
 	    cd.p = sp;
-	    sp->send_timer = tmr_create((struct timeval*) 0, send_timer_proc, cd, 100000L, 1);
+	    sp->send_timer = tmr_create((struct timeval*) 0, send_timer_proc, cd, 10000L, 1);
 	    /* (Repeat every tenth second - arbitrary often value.) */
 	    if (sp->send_timer == NULL) {
 		i_errno = IEINITTEST;
