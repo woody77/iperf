@@ -932,7 +932,7 @@ iperf_parse_arguments(struct iperf_test *test, int argc, char **argv)
 #endif /* HAVE_TCP_CONGESTION */
 		break;
 	    case 'd':
-		test->debug = 1;
+		test->debug += 1;
 		break;
 	    case 'I':
 		test->pidfile = strdup(optarg);
@@ -1061,12 +1061,17 @@ iperf_check_throttle(struct iperf_stream *sp, struct timeval *nowP)
     if (sp->test->done)
         return;
 
-    seconds = timeval_diff(&rp->start_time, nowP);
-    bits_per_second = rp->bytes_sent * 8 / seconds;
+    seconds = timeval_diff(&rp->interval_start_time, nowP);
+    bits_per_second = seconds == 0.0 ? 0 : rp->bytes_sent_this_interval * 8 / seconds;
     if ( seconds == 0.0 || bits_per_second < sp->test->settings->rate) {
+        if( (sp->test->debug > 1) && ! FD_ISSET(sp->socket, &sp->test->write_set))
+            printf("GREEN seconds: %f, bytes: %llu, bps: %llu\n", seconds, rp->bytes_sent_this_interval, bits_per_second);
         sp->green_light = 1;
         FD_SET(sp->socket, &sp->test->write_set);
     } else {
+        if( (sp->test->debug > 1) && FD_ISSET(sp->socket, &sp->test->write_set)) {
+            printf("RED   seconds: %f, bytes: %llu, bps: %llu\n", seconds, rp->bytes_sent_this_interval, bits_per_second);
+        }
         sp->green_light = 0;
         FD_CLR(sp->socket, &sp->test->write_set);
     }
@@ -1844,6 +1849,10 @@ iperf_defaults(struct iperf_test *testp)
 
     testp->stats_interval = testp->reporter_interval = 1;
     testp->num_streams = 1;
+
+#if ! defined(HAVE_SO_MAX_PACING_RATE)
+    testp->no_fq_socket_pacing = 1;
+#endif
 
     testp->settings->domain = AF_UNSPEC;
     testp->settings->unit_format = 'a';
