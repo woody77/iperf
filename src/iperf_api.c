@@ -669,6 +669,7 @@ iperf_parse_arguments(struct iperf_test *test, int argc, char **argv)
 	{"get-server-output", no_argument, NULL, OPT_GET_SERVER_OUTPUT},
 	{"udp-counters-64bit", no_argument, NULL, OPT_UDP_COUNTERS_64BIT},
 	{"no-fq-socket-pacing", no_argument, NULL, OPT_NO_FQ_SOCKET_PACING},
+        {"max-pacing-rate", required_argument, NULL, OPT_MAX_PACING_RATE},
         {"debug", no_argument, NULL, 'd'},
         {"help", no_argument, NULL, 'h'},
         {NULL, 0, NULL, 0}
@@ -959,6 +960,9 @@ iperf_parse_arguments(struct iperf_test *test, int argc, char **argv)
 		return -1;
 #endif
 		break;
+            case OPT_MAX_PACING_RATE:
+                test->settings->max_pacing_rate = strtol(optarg, &endptr, 0);
+                break;
             case 'h':
             default:
                 usage_long();
@@ -1198,6 +1202,8 @@ iperf_create_send_timers(struct iperf_test * test)
     struct timeval now;
     struct iperf_stream *sp;
     TimerClientData cd;
+    float pps;
+    int pacing_rate;
 
     if (gettimeofday(&now, NULL) < 0) {
 	i_errno = IEINITTEST;
@@ -1207,8 +1213,16 @@ iperf_create_send_timers(struct iperf_test * test)
         sp->green_light = 1;
 	if (test->settings->rate != 0) {
 	    cd.p = sp;
-	    /* (Repeat every millisecond - arbitrary value to provide smooth pacing.) */
-	    sp->send_timer = tmr_create((struct timeval*) 0, send_timer_proc, cd, 1000L, 1);
+	    /* calculate a pacing rate based on the desired send rate */
+        pps = test->settings->rate / 8.0f / test->settings->blksize;
+        pacing_rate = SEC_TO_US / (float)pps;
+        printf("calculated pacing rate: %dµs\n", pacing_rate);
+        if (pacing_rate < test->settings->max_pacing_rate) {
+            pacing_rate = test->settings->max_pacing_rate;
+        }
+        printf("max pacing rate: %dµs\n", test->settings->max_pacing_rate);
+        printf("using pacing rate: %dµs\n", pacing_rate);
+	    sp->send_timer = tmr_create((struct timeval*) 0, send_timer_proc, cd, pacing_rate, 1);
 	    if (sp->send_timer == NULL) {
 		i_errno = IEINITTEST;
 		return -1;
@@ -1863,6 +1877,7 @@ iperf_defaults(struct iperf_test *testp)
     testp->settings->mss = 0;
     testp->settings->bytes = 0;
     testp->settings->blocks = 0;
+    testp->settings->max_pacing_rate = MAX_PACING_RATE;
     memset(testp->cookie, 0, COOKIE_SIZE);
 
     testp->multisend = 10;	/* arbitrary */

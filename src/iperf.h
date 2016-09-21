@@ -121,6 +121,7 @@ struct iperf_settings
     iperf_size_t blocks;            /* number of blocks (packets) to send */
     char      unit_format;          /* -f */
     int       num_ostreams;         /* SCTP initmsg settings */
+    int       max_pacing_rate;      /* max-pacing-rate option (microseconds) */
 };
 
 struct iperf_test;
@@ -306,6 +307,7 @@ struct iperf_test
 #define UDP_RATE (1024 * 1024) /* 1 Mbps */
 #define OMIT 0 /* seconds */
 #define DURATION 10 /* seconds */
+#define MAX_PACING_RATE 1000L /* 1ms in microseconds */
 
 #define SEC_TO_NS 1000000000LL	/* too big for enum/const on some platforms */
 #define MAX_RESULT_STRING 4096
